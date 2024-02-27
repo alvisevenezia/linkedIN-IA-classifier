@@ -1,7 +1,9 @@
 transformers
 torch
 pandas
-msvcrt
 datasets 
 evaluate 
 accelerate
+datasets
+scikit-learn
+requests

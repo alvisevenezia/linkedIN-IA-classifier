@@ -1,14 +1,24 @@
-from transformers import pipeline,AutoModelForSequenceClassification, TrainingArguments, Trainer
+from transformers import pipeline,AutoModelForSequenceClassification, TrainingArguments, Trainer, AutoTokenizer,DataCollatorWithPadding
 import csv
 import random
 import signal
 import msvcrt
+from datasets import load_dataset
+import numpy as np
+import evaluate
 
 label_id = 8
 text_id = 3
+train_data_index = random.randint(0, 4000)
+test_data_index = random.randint(4500 , 11000)
+
+
+accuracy = evaluate.load("accuracy")
 
 global classifier
 global label
+
+tokeniser = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 
 labels_en = ["Not IA","Surely NOT IA","Maybe IA","Surely IA","IA"]
 label_fr = ["Pas IA","Sûrement PAS IA","Peut-être IA","Sûrement IA","IA"]
@@ -16,8 +26,39 @@ label_fr = ["Pas IA","Sûrement PAS IA","Peut-être IA","Sûrement IA","IA"]
 #matrix to store the results
 results_matrix = [[0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0]]
 
-id2label = {0: "Not IA", 1: "Surely NOT IA", 2: "Maybe IA", 3: "Surely IA", 4: "IA"}
-label2id = {"Not IA": 0, "Surely NOT IA": 1, "Maybe IA": 2, "Surely IA": 3, "IA": 4}
+id2label_en = {0: "Not IA", 1: "Surely NOT IA", 2: "Maybe IA", 3: "Surely IA", 4: "IA"}
+label2id_en = {"Not IA": 0, "Surely NOT IA": 1, "Maybe IA": 2, "Surely IA": 3, "IA": 4}
+
+def clean_data(data):
+
+    print("Cleaning data...")
+    
+    #iterate through the data and remove the rows with empty values
+    for i in range(0, len(data["train"])):
+
+        print(data["train"][i])
+
+        if data["train"][i] == "":
+            data["train"].pop(i)
+            continue
+        else:
+            #check if a cell is empty
+            for j in range(0, len(data["train"][i])):
+                if data["train"][i][j] == "":
+                    data["train"].pop(i)
+                    break
+
+    print("Data cleaned")
+
+    return data
+
+
+def preprocess_function(data):
+    return tokeniser(data["jobTitle"], padding="max_length", truncation=True)
+
+def train_model():
+
+    return
 
 def roberta_classify(text, candidate_labels):
     
@@ -69,6 +110,11 @@ def save_handler(signal, frame):
 
     print("Saved")
 
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    predictions = np.argmax(predictions, axis=1)
+    return accuracy.compute(predictions=predictions, references=labels)
+
 def main():
     
     global classifier
@@ -97,6 +143,41 @@ def main():
 
     if method == "1":
         label = labels_en
+
+        dataset = load_dataset("csv", data_files="file.csv")
+        clean_data(dataset)
+        tokenised_dataset = dataset.map(preprocess_function, batched=True)
+        data_collator = DataCollatorWithPadding(tokenizer=tokeniser)
+
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "roberta-large-mnli", num_labels=5, id2label=id2label_en, label2id=label2id_en
+            )
+        
+        training_args = TrainingArguments(
+            output_dir="./trained_models/roberta",
+            learning_rate=2e-5,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
+            num_train_epochs=2,
+            weight_decay=0.01,
+            evaluation_strategy="epoch",
+            save_strategy="epoch",
+            load_best_model_at_end=True,
+            push_to_hub=True,
+        )
+
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=tokenised_dataset["train"],
+            eval_dataset=tokenised_dataset["test"],
+            tokenizer=tokeniser,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,    
+        )
+
+        trainer.train()
+
         classifier = pipeline('text-classification',model='roberta-large-mnli')
 
     elif method == "2":
