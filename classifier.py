@@ -8,8 +8,10 @@ label_id = 8
 text_id = 3
 
 global classifier
+global label
 
-labels = ["Not IA","Surely NOT IA","Maybe IA","Surely IA","IA"]
+labels_en = ["Not IA","Surely NOT IA","Maybe IA","Surely IA","IA"]
+label_fr = ["Pas IA","Sûrement PAS IA","Peut-être IA","Sûrement IA","IA"]
 
 #matrix to store the results
 results_matrix = [[0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0]]
@@ -27,9 +29,9 @@ def save_results():
     with open("results.csv", "w", newline="") as file:
         writer = csv.writer(file)
         writer.writerow(["sep=,"])
-        writer.writerow(["Prédictions : Réels"]+labels)
-        for i in range(0, len(labels)):
-            writer.writerow([labels[i]]+results_matrix[i])
+        writer.writerow(["Prédictions : Réels"]+label)
+        for i in range(0, len(label)):
+            writer.writerow([label[i]]+results_matrix[i])
 
         #put statistics in the file
         writer.writerow([" "])
@@ -37,17 +39,17 @@ def save_results():
 
         writer.writerow(["Statistics"])
         writer.writerow([" "])
-        writer.writerow([" "]+labels)
+        writer.writerow([" "]+label)
 
-        for i in range(0, len(labels)):
+        for i in range(0, len(label)):
             total = sum(results_matrix[i]) 
-            row = [" "]*(len(labels)+2)
+            row = [" "]*(len(label)+2)
             row[0] = "Total row " + str(i) +" : "+str(total)
-            for j in range(0, len(labels)):
+            for j in range(0, len(label)):
                 #print porcentage 
                 row[j+1] = str(round(results_matrix[i][j]*100/(total if total != 0 else 1),2)) + " %"
 
-            row[len(labels)+1] = labels[i]
+            row[len(label)+1] = label[i]
             writer.writerow(row)
 
 
@@ -70,7 +72,8 @@ def save_handler(signal, frame):
 def main():
     
     global classifier
-
+    global label
+    
     signal.signal(signal.SIGINT, exit_handler)
 
     #ask user for method and  nbmber of rows to classify
@@ -93,15 +96,15 @@ def main():
         return
 
     if method == "1":
+        label = labels_en
         classifier = pipeline('text-classification',model='roberta-large-mnli')
 
     elif method == "2":
 
-        model = AutoModelForSequenceClassification.from_pretrained(
-            "camembert-base",num_labels=len(labels),id2label=id2label, label2id=label2id
-        )
+        #model = AutoModelForSequenceClassification.from_pretrained("camembert-base", num_labels=5, id2label=id2label, label2id=label2id)
 
-        classifier = pipeline('text-classification',model=model)
+        label = label_fr
+        classifier = pipeline('zero-shot-classification',model='camembert-base')
 
 
     #open file.csv with xlsxwriter
@@ -144,12 +147,12 @@ def main():
 
         #classify the text
 
-        result = roberta_classify(text, labels)
+        result = roberta_classify(text, label)
     
         print(result)
 
         predicted_label = result['labels'][0]
-        predicted_label_index = labels.index(predicted_label)
+        predicted_label_index = label.index(predicted_label)
 
         print("n: ", n)
         print("Text: ", text)
@@ -172,14 +175,14 @@ def main():
     save_results()
 
     #convert the matrix to porcentage
-    for i in range(0, len(labels)):
+    for i in range(0, len(label)):
         total = sum(results_matrix[i]) 
         print ("Total row " + str(i) +" : "+str(total)) 
-        for j in range(0, len(labels)):
+        for j in range(0, len(label)):
 
             results_matrix[i][j] = results_matrix[i][j]*100/(total if total != 0 else 1)
 
-    for i in range(0, len(labels)): 
+    for i in range(0, len(label)): 
         print(results_matrix[i])
 
 if __name__ == "__main__":
