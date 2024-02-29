@@ -29,32 +29,56 @@ results_matrix = [[0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0], [0,0,0,0,0
 id2label_en = {0: "Not IA", 1: "Surely NOT IA", 2: "Maybe IA", 3: "Surely IA", 4: "IA"}
 label2id_en = {"Not IA": 0, "Surely NOT IA": 1, "Maybe IA": 2, "Surely IA": 3, "IA": 4}
 
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
+
 def clean_data(data):
 
     print("Cleaning data...")
     
+    row_erased = 0 
+
+    total = len(data["train"])
+
     #iterate through the data and remove the rows with empty values
     for i in range(0, len(data["train"])):
 
-        print(data["train"][i])
+        printProgressBar(i, total, prefix = 'Training dataset cleaned : |', suffix = 'Complete', length = 50)
 
-        if data["train"][i] == "":
-            data["train"].pop(i)
-            continue
-        else:
-            #check if a cell is empty
-            for j in range(0, len(data["train"][i])):
-                if data["train"][i][j] == "":
-                    data["train"].pop(i)
-                    break
+        #check if there is a NaN value in the row
+        if data["train"][i]["jobTitle"] == None:
+           
+            #remove the row
+            data["train"][i]["jobTitle"] = "test"
 
-    print("Data cleaned")
+            row_erased += 1
+
+    print("Data cleaned :" + str(row_erased) + " rows erased")
 
     return data
 
 
 def preprocess_function(data):
-    return tokeniser(data["jobTitle"], padding="max_length", truncation=True)
+
+    return tokeniser(text=data["jobTitle"], padding=True, truncation=True, max_length=128)
 
 def train_model():
 
@@ -145,12 +169,19 @@ def main():
         label = labels_en
 
         dataset = load_dataset("csv", data_files="file.csv")
-        clean_data(dataset)
-        tokenised_dataset = dataset.map(preprocess_function, batched=True)
+
+        dataset = dataset["train"].train_test_split(test_size=0.2)
+
+        tokenised_dataset = dataset.map(preprocess_function,batched=True)
+
+        #tokenised_dataset = tokenised_dataset.remove_columns(tokenised_dataset["train"].column_names)
+
+        print(tokenised_dataset)
+
         data_collator = DataCollatorWithPadding(tokenizer=tokeniser)
 
         model = AutoModelForSequenceClassification.from_pretrained(
-            "roberta-large-mnli", num_labels=5, id2label=id2label_en, label2id=label2id_en
+            "roberta-large-mnli", num_labels=5, id2label=id2label_en, label2id=label2id_en, ignore_mismatched_sizes=True
             )
         
         training_args = TrainingArguments(
@@ -162,8 +193,7 @@ def main():
             weight_decay=0.01,
             evaluation_strategy="epoch",
             save_strategy="epoch",
-            load_best_model_at_end=True,
-            push_to_hub=True,
+            load_best_model_at_end=True
         )
 
         trainer = Trainer(
@@ -173,7 +203,7 @@ def main():
             eval_dataset=tokenised_dataset["test"],
             tokenizer=tokeniser,
             data_collator=data_collator,
-            compute_metrics=compute_metrics,    
+            compute_metrics=compute_metrics
         )
 
         trainer.train()
