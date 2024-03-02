@@ -170,13 +170,11 @@ def main():
 
         dataset = load_dataset("csv", data_files="file.csv")
 
+        #ony keep collumn "jobTitle" and "label"
+        dataset = dataset.remove_columns(["id","companyName","description","companyUrl","dateRange","location","logoUrl"])
+
         dataset = dataset["train"].train_test_split(test_size=0.2)
-
         tokenised_dataset = dataset.map(preprocess_function,batched=True)
-
-        #tokenised_dataset = tokenised_dataset.remove_columns(tokenised_dataset["train"].column_names)
-
-        print(tokenised_dataset)
 
         data_collator = DataCollatorWithPadding(tokenizer=tokeniser)
 
@@ -187,13 +185,14 @@ def main():
         training_args = TrainingArguments(
             output_dir="./trained_models/roberta",
             learning_rate=2e-5,
-            per_device_train_batch_size=8,
-            per_device_eval_batch_size=8,
+            per_device_train_batch_size=32,
+            per_device_eval_batch_size=2,
             num_train_epochs=2,
             weight_decay=0.01,
             evaluation_strategy="epoch",
             save_strategy="epoch",
-            load_best_model_at_end=True
+            load_best_model_at_end=True,
+            label_names=labels_en,
         )
 
         trainer = Trainer(
